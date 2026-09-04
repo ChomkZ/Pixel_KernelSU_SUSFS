@@ -329,25 +329,32 @@ jobs:
       run: |
         set -ex
         # Download SukiSU KPM patcher from official repo
-        curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/main/kpm/patch_linux" -o /usr/local/bin/kpm_patch_linux
-        chmod +x /usr/local/bin/kpm_patch_linux
+        curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/main/kpm/patch_linux" -o kpm_patch_linux
+        chmod +x kpm_patch_linux
         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/main/kpm/kpimg" -o kpimg
         curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/main/kpm/kptools" -o kptools
         chmod +x kptools
 
-        # Locate built kernel image (bazel build path for pixel kernels)
-        if [ -f "$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image" ]; then
-          KIMAGE="$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image"
-        elif [ -f "$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image" ]; then
-          KIMAGE="$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image"
-        else
-          echo "Kernel image not found - KPM patch skipped"
-          find "$GITHUB_WORKSPACE/kernel" -name "Image" -o -name "Image.gz" | head -20
+        # Locate built kernel image (pixel device kernels output to out/<device>/dist)
+        for CAND in \
+          "$GITHUB_WORKSPACE/kernel/out/bluejay/dist/Image" \
+          "$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image" \
+          "$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image"; do
+          [ -f "$CAND" ] && KIMAGE="$CAND" && break
+        done
+
+        if [ -z "${KIMAGE:-}" ]; then
+          echo "Kernel image not found anywhere - failing"
+          find "$GITHUB_WORKSPACE/kernel/out" -maxdepth 3 -type d 2>/dev/null | head -30
           exit 1
         fi
 
         echo "Patching KPM into: $KIMAGE"
-        kpm_patch_linux --kpimg kpimg --skey "" "$KIMAGE" || true
+        cp "$KIMAGE" "$KIMAGE.kpm.bak"
+        ./kpm_patch_linux --kpimg kpimg --skey "" "$KIMAGE" || {
+          echo "KPM inline patch failed - keeping original Image (KPM may still work via CONFIG_KPM=y)"
+        }
+        ls -la "$KIMAGE"
 
     - name: Build Boot Image (bluejay)
       working-directory: ${{ github.workspace }}
@@ -355,23 +362,21 @@ jobs:
         set -ex
         mkdir -p boot-artifacts
 
-        # Locate built kernel image
-        if [ -f "$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image" ]; then
-          KIMAGE="$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image"
-          KLZ4="$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image.lz4"
-        else
-          KIMAGE="$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image"
-          KLZ4="$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image.lz4"
-        fi
+        for CAND in \
+          "$GITHUB_WORKSPACE/kernel/out/bluejay/dist/Image" \
+          "$GITHUB_WORKSPACE/kernel/bazel-bin/aosp/kernel_aarch64/Image" \
+          "$GITHUB_WORKSPACE/kernel/out/$ANDROID_VERSION-$KERNEL_VERSION/dist/Image"; do
+          [ -f "$CAND" ] && KIMAGE="$CAND" && break
+        done
         cp "$KIMAGE" boot-artifacts/Image
 
-        # Pixel 6a (bluejay): boot.img header v4, kernel-only (no ramdisk in boot for android14+ pixels - ramdisk is in init_boot)
+        # Pixel 6a (bluejay): boot.img header v4, kernel-only (ramdisk lives in init_boot on A14+)
         "$MKBOOTIMG" --header_version 4 --kernel "$KIMAGE" --output "boot-artifacts/bluejay-boot.img" \
           --os_version 16.0.0 --os_patch_level "2026-05-05" \
           --cmdline "console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.page_alloc.sample=10 kasan.stacktrace=off kvm-arm.mode=protected bootconfig ioremap_guard rcupdate.rcu_expedited=1 rcu_nocbs=0-7 clocksource=arch_sys_counter root=/dev/ram0 firmware_class.path=/vendor/firmware clk_ignore_unused loop.max_part=7 coherent_pool=4M no_console_suspend softlockup_panic=1 cgroup_disable=memory fips140.load_sequential=1 exynos_mfc.load_sequential=1 exynos_drm.load_sequential=1 pcie-exynos-core.load_sequential=1 g2d.load_sequential=1 disable_dma32=on dyndbg=func_alloc_contig_dump_pages+p printk.devkmsg=on cma_sysfs.experimental=Y rcupdate.rcu_expedited=1 rcu_nocbs=all rcutree.enable_rcu_lazy swiotlb=noforce cgroup.memory=nokmem at24.write_timeout=100 log_buf_len=1024K bootconfig console=null exynos_drm.panel_name=samsung-s6e3fc3_6a tcpci_max77759.conf_sbu=0 tcpci_max77759.mode= ufs_pixel_fips140.fips_first_lba=30086 ufs_pixel_fips140.fips_last_lba=30597 ufs_pixel_fips140.fips_lu=0 ufs_pixel_fips140.use_hw_keys=true id_aa64mmfr1.vh=0 kvm-arm.mode=nvhe" \
           --pagesize 4096
 
-        # Sign with AVB (device accepts custom key when bootloader unlocked)
+        # Sign with AVB test key (bootloader unlocked accepts it)
         "$AVBTOOL" add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image "boot-artifacts/bluejay-boot.img" --algorithm SHA256_RSA2048 --key "$BOOT_SIGN_KEY_PATH"
 
         ls -la boot-artifacts/
