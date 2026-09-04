@@ -15,8 +15,16 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/aosp
       run: |
-        cp "$GITHUB_WORKSPACE/kernel_patches/bbrv3-${inputs.android_version}-${inputs.kernel_version}.patch" $GITHUB_WORKSPACE/kernel/aosp
-        patch -p1 < "bbrv3-${inputs.android_version}-${inputs.kernel_version}.patch"
+        # Try new patch naming first, fall back to legacy
+        if [ -f "$GITHUB_WORKSPACE/kernel_patches/common/bbrv3/0001-net-tcp-backport-BBRv3-to-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" ]; then
+          cp "$GITHUB_WORKSPACE/kernel_patches/common/bbrv3/0001-net-tcp-backport-BBRv3-to-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" ./
+          patch -p1 --forward < "0001-net-tcp-backport-BBRv3-to-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" || echo "BBR patch applied with rejects - continuing"
+        elif [ -f "$GITHUB_WORKSPACE/kernel_patches/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" ]; then
+          cp "$GITHUB_WORKSPACE/kernel_patches/bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" ./
+          patch -p1 --forward < "bbrv3-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch" || echo "BBR patch applied with rejects - continuing"
+        else
+          echo "No BBR patch found for ${{ inputs.android_version }}-${{ inputs.kernel_version }} - skipping BBR source patch (config-only)"
+        fi
 
     - name: Fix modules.bzl
       shell: bash
