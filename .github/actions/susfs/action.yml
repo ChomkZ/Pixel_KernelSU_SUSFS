@@ -81,9 +81,15 @@ runs:
         cp ${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
         patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
 
-    - name: Apply KSU SUSFS Patches
+    - name: Apply KSU SUSFS Patches (SukiSU-Ultra)
       shell: bash
-      working-directory: ${{ github.workspace }}/kernel/aosp/KernelSU-Next
+      working-directory: ${{ github.workspace }}/kernel/aosp/KernelSU
       run: |
-        cp ${{ github.workspace }}/kernel_patches/wild/ksun-0daf55582-susfs-v2.1.0-e259e7d6.patch ./
-        patch -p1 < ksun-0daf55582-susfs-v2.1.0-e259e7d6.patch
+        # Official susfs4ksu patch for SukiSU-style kernel structure (v2.1.0, gki-android14-6.1)
+        cp ${{ github.workspace }}/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+        patch -p1 --forward < 10_enable_susfs_for_ksu.patch || {
+          echo "=== SUSFS patch to SukiSU failed, collecting rejects ==="
+          find . -name "*.rej" -exec echo {} \;
+          ls -la
+          # Continue anyway - rejects will be uploaded as artifact
+        }

@@ -33,21 +33,21 @@ runs:
 
         echo "Fetching latest commits..."
         
-        # Wild KSU
+        # SukiSU-Ultra (KPM support)
         if [ -n "${{ inputs.ksu_commit }}" ]; then
           # Try to resolve input as a ref (branch/tag)
-          resolved_commit=$(get_commit "https://github.com/WildKernels/Wild_KSU.git" "${{ inputs.ksu_commit }}")
-          
+          resolved_commit=$(get_commit "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" "${{ inputs.ksu_commit }}")
+
           if [ -n "$resolved_commit" ]; then
             ksu_commit="$resolved_commit"
           else
             # If resolution failed, assume input is a commit SHA
             ksu_commit="${{ inputs.ksu_commit }}"
           fi
-          echo "Using provided Wild KSU commit: $ksu_commit"
+          echo "Using provided SukiSU-Ultra commit: $ksu_commit"
         else
-          ksu_commit=$(get_commit "https://github.com/WildKernels/Wild_KSU.git" "refs/heads/canary")
-          echo "Wild KSU: $ksu_commit"
+          ksu_commit=$(get_commit "https://github.com/SukiSU-Ultra/SukiSU-Ultra.git" "refs/heads/main")
+          echo "SukiSU-Ultra: $ksu_commit"
         fi
         echo "ksu_commit=$ksu_commit" >> $GITHUB_OUTPUT
         
