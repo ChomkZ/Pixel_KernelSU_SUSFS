@@ -57,19 +57,9 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        cat >> "${{ github.workspace }}/wild_gki.fragment" << 'EOF'
-        # KernelSU SUSFS Configuration
-        CONFIG_KSU_SUSFS=y
-        CONFIG_KSU_SUSFS_SUS_PATH=y
-        CONFIG_KSU_SUSFS_SUS_MOUNT=y
-        CONFIG_KSU_SUSFS_SUS_KSTAT=y
-        CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-        CONFIG_KSU_SUSFS_ENABLE_LOG=y
-        CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-        CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-        CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-        CONFIG_KSU_SUSFS_SUS_MAP=y
-        EOF
+        # SUSFS config options are added by the SukiSU kernelsu action (single source of truth).
+        # Only verify the fragment contains them:
+        grep -q "CONFIG_KSU_SUSFS=y" "${{ github.workspace }}/wild_gki.fragment" && echo "[+] SUSFS configs present in fragment"
     
     - name: Apply Kernel SUSFS Patches
       shell: bash
