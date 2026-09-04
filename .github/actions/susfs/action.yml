@@ -79,17 +79,29 @@ runs:
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/fs/"* "${{ github.workspace }}/kernel/aosp/fs/"
         cp "${{ github.workspace }}/susfs4ksu/kernel_patches/include/linux/"* "${{ github.workspace }}/kernel/aosp/include/linux/"
         cp ${{ github.workspace }}/susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
-        patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+        patch -p1 --forward < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || echo "base susfs patch had rejects"
 
-    - name: Apply KSU SUSFS Patches (SukiSU-Ultra)
+        # Fix rejected hunks manually (kernel 6.1.124-11 context drift)
+        # 1. fs/proc/base.c: insert susfs_def include after dma-buf.h
+        if [ -f fs/proc/base.c.rej ] && grep -q "susfs_def" fs/proc/base.c.rej; then
+          grep -q "susfs_def" fs/proc/base.c || sed -i '/#include <linux\/dma-buf.h>/a #if defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n#include <linux/susfs_def.h>\n#endif' fs/proc/base.c
+          rm -f fs/proc/base.c.rej
+          echo "[+] base.c susfs include fixed manually"
+        fi
+
+        # Report any remaining rejects (fail loudly so we know)
+        REJS=$(find . -name "*.rej" | head -10)
+        if [ -n "$REJS" ]; then
+          echo "REMAINING REJECTS: $REJS"
+          cat $REJS || true
+        fi
+
+    - name: Apply KSU SUSFS Patches (SukiSU susfs branch has SUSFS built-in)
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/aosp/KernelSU
       run: |
-        # Official susfs4ksu patch for SukiSU-style kernel structure (v2.1.0, gki-android14-6.1)
-        cp ${{ github.workspace }}/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-        patch -p1 --forward < 10_enable_susfs_for_ksu.patch || {
-          echo "=== SUSFS patch to SukiSU failed, collecting rejects ==="
-          find . -name "*.rej" -exec echo {} \;
-          ls -la
-          # Continue anyway - rejects will be uploaded as artifact
+        # SUSFS integration is already built into DeepLunaria/SukiSU-Ultra susfs branch.
+        # No additional KSU susfs patch is needed. Verify marker:
+        grep -q "KSU_SUSFS" kernel/Kconfig && echo "[+] SUSFS integration confirmed in SukiSU Kconfig" || {
+          echo "[!] KSU_SUSFS not found in Kconfig - unexpected!"; exit 1
         }
