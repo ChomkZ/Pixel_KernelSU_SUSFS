@@ -79,10 +79,10 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/aosp/KernelSU
       run: |
-        # Extract and export KSU version info
-        KSU_GIT_VERSION=$(git rev-list --count HEAD 2>/dev/null)
-        KSU_GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
-        KSU_COMMIT=$(git rev-parse --short HEAD 2>/dev/null)
+        # Extract and export KSU version info (never fail on missing tags)
+        KSU_GIT_VERSION=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+        KSU_GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "susfs")
+        KSU_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
         KSU_VERSION=$((13000 + KSU_GIT_VERSION))
 
         echo "KSU_GIT_TAG=$KSU_GIT_TAG" >> $GITHUB_ENV
