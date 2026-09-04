@@ -227,10 +227,13 @@ jobs:
         set -ex
         # Copy fragment to kernel tree for bazel
         cp "$GITHUB_WORKSPACE/wild_gki.fragment" aosp/arch/arm64/configs/wild_gki.fragment
-        # Find the device build script (e.g. build_bluejay.sh) in kernel root
-        BUILD_SCRIPT=$(ls build_*.sh 2>/dev/null | head -n 1 || true)
+        # Use the device-specific build script matching the synced repo (e.g. build_bluejay.sh)
+        BUILD_SCRIPT=""
+        for cand in build_bluejay.sh build_lynx.sh build_pantah.sh; do
+          [ -f "$cand" ] && BUILD_SCRIPT="$cand" && break
+        done
         if [ -z "$BUILD_SCRIPT" ]; then
-          echo "ERROR: no build_*.sh found in kernel root"; ls -la; exit 1
+          echo "ERROR: no known device build script found"; ls -la; exit 1
         fi
         echo "Using build script: $BUILD_SCRIPT"
         ./$BUILD_SCRIPT --config=release --stamp --defconfig_fragment=//aosp:arch/arm64/configs/wild_gki.fragment || exit 1
